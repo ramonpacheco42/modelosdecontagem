@@ -14,6 +14,7 @@ pyspark==3.3.1
 python-dateutil==2.8.2
 pytz==2023.3
 scipy==1.10.1
+seaborn==0.12.2
 six==1.16.0
 statsmodels==0.14.0
 tzdata==2023.3
