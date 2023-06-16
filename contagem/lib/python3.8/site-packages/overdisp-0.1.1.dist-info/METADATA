@@ -1,0 +1,19 @@
+Metadata-Version: 2.1
+Name: overdisp
+Version: 0.1.1
+Summary: Estimation of overdispersion parameters
+Home-page: https://gitlab.com/aaylward/overdisp
+Author: Anthony Aylward
+Author-email: aaylward@salk.edu
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
+# overdisp
+
+Estimate overdispersion parameters
+

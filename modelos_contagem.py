@@ -158,5 +158,132 @@ summary_col([modelo_poisson],
                 'Log-lik':lambda x: "{:.2f}".format(x.llf)
         })
 # %%
-# 02:21:00
-# Terceiro Bloco
+################################################################################
+#            TESTE DE SUPERDISPERSÃO DE CAMERON E TRIVEDI (1990)               #
+################################################################################
+#CAMERON, A. C.; TRIVEDI, P. K. Regression-based tests for overdispersion in
+#the Poisson model. Journal of Econometrics, v. 46, n. 3, p. 347-364, 1990.
+
+#1º Passo: estimar um modelo Poisson;
+#2º Passo: criar uma nova variável (Y*) utilizando os fitted values do modelo
+#Poisson estimado anteriormente;
+#3º Passo: estimar um modelo auxiliar OLS, com a variável Y* como variável
+#dependente, os fitted values do modelo Poisson como única variável preditora e 
+#sem o intercepto;
+#4º Passo: Observar a significância do parâmetro beta.
+
+#Adicionando os fitted values do modelo Poisson (lambda_poisson) ao dataframe:
+df_corruption['lambda_poisson'] = modelo_poisson.fittedvalues
+df_corruption
+# %%
+#Criando a nova variável Y*:
+df_corruption['ystar'] = (((df_corruption['violations']
+                            -df_corruption['lambda_poisson'])**2)
+                          -df_corruption['violations'])/df_corruption['lambda_poisson']
+df_corruption
+# %%
+#Estimando o modelo auxiliar OLS, sem o intercepto:
+modelo_auxiliar = smf.ols(formula='ystar ~ 0 + lambda_poisson',
+                          data=df_corruption).fit()
+# %%
+#Parâmetros do 'modelo_auxiliar'
+modelo_auxiliar.summary()
+#Caso o p-value do parâmetro do lambda_poisson seja maior que 0.05,
+#verifica-se a existência de equidispersão nos dados.
+#Caso contrário, diagnostica-se a existência de superdispersão nos dados, fato
+#que favorecerá a estimação de um modelo binomial negativo, como ocorre nesse
+#caso.
+# %%
+# Função 'overdisp'
+# Instalação e carregamento da função 'overdisp' do pacote 'statstests.tests'
+# Autores do pacote: Luiz Paulo Fávero e Helder Prado Santos
+# https://stats-tests.github.io/statstests/
+# pip install statstests
+from statstests.tests import overdisp
+
+#Elaboração direta do teste de superdispersão
+overdisp(modelo_poisson, df_corruption)
+# %%
+# Apenas para fins didáticos, caso considerássemos a estimação Poisson
+#como a mais adequada, qual seria a quantidade média esperada de violações
+#de trânsito para um país cujo corpo diplomático fosse composto por 23 membros,
+#considerando o período anterior à vigência da lei e cujo índice de corrupção
+#seja igual a 0.5?
+
+modelo_poisson.predict(pd.DataFrame({'staff':[23],
+                                     'post':['no'],
+                                     'corruption':[0.5]}))
+# %%
+#Qual seria a quantidade média esperada de violações de trânsito para o mesmo
+#país, porém agora considerando a vigência da lei?
+
+modelo_poisson.predict(pd.DataFrame({'staff':[23],
+                                     'post':['yes'],
+                                     'corruption':[0.5]}))
+# %%
+##############################################################################
+#            A DISTRIBUIÇÃO BINOMIAL NEGATIVA - PARTE CONCEITUAL             #
+##############################################################################
+
+#Estabelecendo uma função da distribuição binomial negativa para determinados
+#valores de theta e delta
+#theta: parâmetro de forma da distribuição Poisson-Gama (binomial negativa)
+#delta: parâmetro de taxa de decaimento da distribuição Poisson-Gama
+
+def bneg(theta, delta, m):
+    return ((delta ** theta) * (m ** (theta - 1)) * (exp(-m * delta))) / factorial(theta - 1)
+# %%
+# Plotagem das funções estabelecidas para diferentes valores de
+#theta e delta
+
+m = np.arange(1,21)
+
+bneg_theta2_delta2 = []
+bneg_theta3_delta1 = []
+bneg_theta3_delta05 = []
+
+for item in m:
+    # Estabelecendo a distribuição binomial negativa com theta=2 e delta=2
+    bneg_theta2_delta2.append(bneg(2,2,item))
+    # Estabelecendo a distribuição binomial negativa com theta=3 e delta=1
+    bneg_theta3_delta1.append(bneg(3,1,item))
+    # Estabelecendo a distribuição binomial negativa com theta=3 e delta=0.5
+    bneg_theta3_delta05.append(bneg(3,0.5,item))
+   
+#Criando um dataframe com m variando de 1 a 20 e diferentes valores de
+#theta e delta
+df_bneg = pd.DataFrame({'m':m,
+                        'bneg_theta2_delta2':bneg_theta2_delta2,
+                        'bneg_theta3_delta1':bneg_theta3_delta1,
+                        'bneg_theta3_delta05':bneg_theta3_delta05})
+
+df_bneg
+# %%
+# Plotagem propriamente dita
+
+def smooth_line_plot(x,y):
+    x_new = np.linspace(x.min(), x.max(),500)
+    f = interp1d(x, y, kind='quadratic')
+    y_smooth=f(x_new)
+    return x_new, y_smooth
+
+x_new, bneg_theta2_delta2 = smooth_line_plot(df_bneg.m,
+                                             df_bneg.bneg_theta2_delta2)
+x_new, bneg_theta3_delta1 = smooth_line_plot(df_bneg.m,
+                                             df_bneg.bneg_theta3_delta1)
+x_new, bneg_theta3_delta05 = smooth_line_plot(df_bneg.m,
+                                              df_bneg.bneg_theta3_delta05)
+
+plt.figure(figsize=(15,10))
+plt.plot(x_new,bneg_theta2_delta2, linewidth=5, color='#440154FF')
+plt.plot(x_new,bneg_theta3_delta1, linewidth=5, color='#22A884FF')
+plt.plot(x_new,bneg_theta3_delta05, linewidth=5, color='#FDE725FF')
+plt.xlabel('m', fontsize=20)
+plt.ylabel('Probabilidades', fontsize=20)
+plt.legend([r'$\theta$ = 2 e $\delta$ = 2',
+            r'$\theta$ = 3 e $\delta$ = 1',
+            r'$\theta$ = 3 e $\delta$ = 0.5'],
+           fontsize=24)
+plt.show
+# %%
+# 322 linha que paramos
