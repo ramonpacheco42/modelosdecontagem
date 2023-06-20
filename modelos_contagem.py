@@ -286,4 +286,279 @@ plt.legend([r'$\theta$ = 2 e $\delta$ = 2',
            fontsize=24)
 plt.show
 # %%
-# 322 linha que paramos
+# Estimação do modelo binomial negativo do tipo NB2
+#O argumento 'family=sm.families.NegativeBinomial(alpha=2.0963)' da função
+#'smf.glm' define a estimação de um modelo binomial negativo do tipo NB2
+#com valor de 'fi' ('alpha' no Python) igual a 2.0963. Lembramos que 'fi' é o
+#inverso do parâmetro de forma 'theta' da distribuição Poisson-Gama.
+
+modelo_bneg = smf.glm(formula='violations ~ staff + post + corruption',
+                      data=df_corruption,
+                      family=sm.families.NegativeBinomial(alpha=2.0963)).fit()
+# %%
+#Parâmetros do modelo
+modelo_bneg.summary()
+# %%
+#Construção de função para a definição do 'alpha' ('fi') ótimo que gera a
+#maximização do valor de Log-Likelihood
+n_samples = 10000
+alphas = np.linspace(0, 10, n_samples)
+llf = np.full(n_samples, fill_value=np.nan)
+for i, alpha in enumerate(alphas):
+    try:
+        model = smf.glm(formula = 'violations ~ staff + post + corruption',
+                        data=df_corruption,
+                        family=sm.families.NegativeBinomial(alpha=alpha)).fit()
+    except:
+        continue
+    llf[i] = model.llf
+alpha_ótimo = alphas[np.nanargmax(llf)]
+alpha_ótimo
+# %%
+#Plotagem dos resultados
+plt.plot(alphas, llf, label='Log-Likelihood')
+plt.axvline(x=alpha_ótimo, color='#440154FF',
+            label=f'alpha: {alpha_ótimo:0.5f}')
+plt.legend()
+# %%
+#Reestimação do modelo binomial negativo com o parâmetro 'alpha_ótimo'
+modelo_bneg = smf.glm(formula='violations ~ staff + post + corruption',
+                      data=df_corruption,
+                      family=sm.families.NegativeBinomial(alpha=alpha_ótimo)).fit()
+# %%
+#Parâmetros do modelo
+modelo_bneg.summary()
+# %%
+# Comparando os modelos Poisson e binomial negativo
+
+summary_col([modelo_poisson, modelo_bneg], 
+            model_names=["Poisson","BNeg"],
+            stars=True,
+            info_dict = {
+                'N':lambda x: "{0:d}".format(int(x.nobs)),
+                'Log-lik':lambda x: "{:.2f}".format(x.llf),
+                'Pseudo-R2':lambda x: "{:.4f}".format(x.pseudo_rsquared()),
+        })
+# %%
+# likelihood ratio test para comparação de LL's entre modelos
+
+#Definição da função 'lrtest'
+def lrtest(modelos):
+    modelo_1 = modelos[0]
+    llk_1 = modelo_1.llnull
+    llk_2 = modelo_1.llf
+    
+    if len(modelos)>1:
+        llk_1 = modelo_1.llf
+        llk_2 = modelos[1].llf
+    LR_statistic = -2*(llk_1-llk_2)
+    p_val = stats.chi2.sf(LR_statistic, 1)
+    return round(LR_statistic,2), round(p_val,2)
+
+lrtest([modelo_poisson, modelo_bneg])
+# %%
+# Gráfico para a comparação dos LL dos modelos Poisson e
+#binomial negativo
+
+#Definição do dataframe com os modelos e respectivos LL
+df_llf = pd.DataFrame({'modelo':['Poisson','BNeg'],
+                      'loglik':[modelo_poisson.llf, modelo_bneg.llf]})
+df_llf
+# %%
+#Plotagem propriamente dita
+fig, ax = plt.subplots(figsize=(15,10))
+
+c = ['#440154FF', '#22A884FF']
+
+ax1 = ax.barh(df_llf.modelo, df_llf.loglik, color = c)
+ax.bar_label(ax1, label_type='center', color='white', fontsize=24)
+ax.set_ylabel("Estimação", fontsize=20)
+ax.set_xlabel("Log-Likehood", fontsize=20)
+# %%
+# COMPARAÇÕES ENTRE AS PREVISÕES:
+#Qual seria a quantidade média esperada de violações de trânsito para um país
+#cujo corpo diplomático seja composto por 23 membros, considerando o período
+#anterior à vigência da lei e cujo índice de corrupção seja igual 0.5?
+
+#Modelo Poisson:
+modelo_poisson.predict(pd.DataFrame({'staff':[23],
+                                     'post':['no'],
+                                     'corruption':[0.5]}))
+# %%
+#Modelo binomial negativo:
+modelo_bneg.predict(pd.DataFrame({'staff':[23],
+                                     'post':['no'],
+                                     'corruption':[0.5]}))
+# %%
+#Qual seria a quantidade média esperada de violações de trânsito para o mesmo
+#país, porém agora considerando a vigência da lei?
+# %%
+#Modelo Poisson:
+modelo_poisson.predict(pd.DataFrame({'staff':[23],
+                                     'post':['yes'],
+                                     'corruption':[0.5]}))
+# %%
+#Modelo binomial negativo:
+modelo_bneg.predict(pd.DataFrame({'staff':[23],
+                                     'post':['yes'],
+                                     'corruption':[0.5]}))
+# %%
+# In[ ]: Adicionando os fitted values dos modelos estimados até o momento,
+#para fins de comparação
+
+df_corruption['fitted_poisson'] = modelo_poisson.fittedvalues
+df_corruption['fitted_bneg'] = modelo_bneg.fittedvalues
+
+df_corruption[['country','code','violations','fitted_poisson','fitted_bneg']]
+# %%
+# Fitted values dos modelos Poisson e binomial negativo, considerando,
+#para fins didáticos, apenas a variável preditora 'staff':
+
+plt.figure(figsize=(20,10))
+sns.relplot(data=df_corruption, x='staff', y='violations',
+            ci=False, color='black', height=8)
+sns.regplot(data=df_corruption, x='staff', y='fitted_poisson', order=3,
+            color='#440154FF')
+sns.regplot(data=df_corruption, x='staff', y='fitted_bneg', order=3,
+            color='#22A884FF')
+plt.xlabel('Number of Diplomats (staff)', fontsize=17)
+plt.ylabel('Unpaid Parking Violations (violations)', fontsize=17)
+plt.legend(['Observado', 'Poisson', 'Fit Poisson', 'CI Poisson',
+            'BNeg', 'Fit BNeg', 'CI BNeg'],
+           fontsize=17)
+plt.show
+# %%
+# Estimações muito próximas para Poisson e BNeg sem superdispersão!
+
+#Para fins didáticos, vamos gerar novo dataset 'corruption2', com quantidades
+#de violações de trânsito iguais, no máximo, a 3. Este procedimento poderá,
+#eventualmente, eliminar o fenômeno da superdispersão nos dados da variável
+#dependente e, consequentemente, tornar as estimações dos modelos POISSON e
+#BINOMIAL NEGATIVO praticamente iguais.
+
+#Gerando novo dataset 'corruption2' com violations <= 3
+df_corruption2 = df_corruption[df_corruption.violations <= 3]
+df_corruption2 = df_corruption2.iloc[:, 0:6] 
+df_corruption2
+# %%
+# Histograma da variável dependente 'violations' no dataset
+#'corruption2'
+
+plt.figure(figsize=(15,10))
+sns.histplot(data=df_corruption2, x="violations", bins=4, color='darkorchid')
+plt.show()
+# %%
+# Diagnóstico preliminar para observação de eventual igualdade entre
+#a média e a variância da variável dependente 'violations' no dataset
+#'corruption2'
+
+pd.DataFrame({'Média':[df_corruption2['violations'].mean()],
+              'Variância':[df_corruption2['violations'].var()]})
+# %%
+# Estimação do 'modelo_poisson2'
+
+modelo_poisson2 = smf.glm(formula='violations ~ staff + post + corruption',
+                          data=df_corruption2,
+                          family=sm.families.Poisson()).fit()
+# %%
+#Parâmetros do modelo
+modelo_poisson2.summary()
+# %%
+# Teste de superdispersão no dataset 'corruption2'
+
+#Adicionando os fitted values do 'modelo_poisson2' (lambda_poisson2)
+#ao dataframe 'df_corruption2':
+df_corruption2['lambda_poisson2'] = modelo_poisson2.fittedvalues
+df_corruption2
+# %%
+#Criando a nova variável Y*:
+df_corruption2['ystar'] = (((df_corruption2['violations']
+                            -df_corruption2['lambda_poisson2'])**2)
+                          -df_corruption2['violations'])/df_corruption2['lambda_poisson2']
+df_corruption2
+# %%
+#Estimando o 'modelo_auxiliar2' OLS, sem o intercepto:
+modelo_auxiliar2 = smf.ols(formula='ystar ~ 0 + lambda_poisson2',
+                           data=df_corruption2).fit()
+
+# %%
+#Parâmetros do 'modelo_auxiliar2'
+modelo_auxiliar2.summary()
+
+#Como o p-value do parâmetro de 'lambda_poisson2' é maior que 0.05,
+#verifica-se a existência de equidispersão nos dados.
+# %%
+# In[ ]: Teste de superdispersão no dataset 'corruption2'
+
+# Função 'overdisp'
+# Instalação e carregamento da função 'overdisp' do pacote 'statstests.tests'
+# Autores do pacote: Luiz Paulo Fávero e Helder Prado Santos
+# https://stats-tests.github.io/statstests/
+# pip install statstests
+from statstests.tests import overdisp
+
+#Elaboração direta do teste de superdispersão
+overdisp(modelo_poisson2, df_corruption2)
+# %%
+# Estimação do 'modelo_bneg2'
+#Construção de função para a definição do 'alpha' ('fi') ótimo que gera a
+#maximização do valor de Log-Likelihood
+n_samples = 10000
+alphas = np.linspace(0, 10, n_samples)
+llf = np.full(n_samples, fill_value=np.nan)
+for i, alpha in enumerate(alphas):
+    try:
+        model = smf.glm(formula = 'violations ~ staff + post + corruption',
+                        data=df_corruption2,
+                        family=sm.families.NegativeBinomial(alpha=alpha)).fit()
+    except:
+        continue
+    llf[i] = model.llf
+alpha_ótimo = alphas[np.nanargmax(llf)]
+alpha_ótimo
+# %%
+#Plotagem dos resultados
+plt.plot(alphas, llf, label='Log-Likelihood')
+plt.axvline(x=alpha_ótimo, color='#440154FF',
+            label=f'alpha: {alpha_ótimo:0.5f}')
+plt.legend()
+# %%
+#Estimação do 'modelo_bneg2' com o parâmetro 'alpha_ótimo'
+modelo_bneg2 = smf.glm(formula='violations ~ staff + post + corruption',
+                       data=df_corruption2,
+                       family=sm.families.NegativeBinomial(alpha=alpha_ótimo)).fit()
+# %%
+#Parâmetros do 'modelo_bneg2'
+modelo_bneg2.summary()
+# %%
+# Comparando os 'modelo_poisson2' e 'modelo_bneg2'
+
+summary_col([modelo_poisson2, modelo_bneg2], 
+            model_names=["Poisson2","BNEG2"],
+            stars=True,
+            info_dict = {
+                'N':lambda x: "{0:d}".format(int(x.nobs)),
+                'Log-lik':lambda x: "{:.2f}".format(x.llf),
+                'Pseudo-R2':lambda x: "{:.2f}".format(x.pseudo_rsquared()),
+        })
+# %%
+# likelihood ratio test para comparação de LL's entre os modelos
+
+#Definição da função 'lrtest'
+def lrtest(modelos):
+    modelo_1 = modelos[0]
+    llk_1 = modelo_1.llnull
+    llk_2 = modelo_1.llf
+    
+    if len(modelos)>1:
+        llk_1 = modelo_1.llf
+        llk_2 = modelos[1].llf
+    LR_statistic = -2*(llk_1-llk_2)
+    p_val = stats.chi2.sf(LR_statistic, 1)
+    return round(LR_statistic,2), round(p_val,2)
+
+lrtest([modelo_poisson2, modelo_bneg2])
+# Quando não há superdispersão, não existem diferenças significantes entre os
+#modelos Poisson e binomial negativo!
+# %%
+# Pausa  02:17:00
