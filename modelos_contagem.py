@@ -561,4 +561,96 @@ lrtest([modelo_poisson2, modelo_bneg2])
 # Quando não há superdispersão, não existem diferenças significantes entre os
 #modelos Poisson e binomial negativo!
 # %%
-# Pausa  02:17:00
+##############################################################################
+#       A DISTRIBUIÇÃO ZERO-INFLATED POISSON (ZIP) - PARTE CONCEITUAL        #
+##############################################################################
+
+#LAMBERT, D. Zero-inflated Poisson regression, with an application to defects
+#in manufacturing. Technometrics, v. 34, n. 1, p. 1-14, 1992.
+
+#Exemplo de uma função da distribuição ZI Poisson, com lambda=1 e plogit=0,7
+def zip_lambda1_plogit07(m):
+    lmbda = 1
+    plogit = 0.7
+    
+    if m == 0:
+        return (plogit) + ((1 - plogit) * exp(-lmbda))
+    else:
+        return (1 - plogit) * ((exp(-lmbda) * lmbda ** m) / factorial(m))
+# %%
+# Plotagem das funções estabelecidas
+
+m = np.arange(0,21)
+
+zip_lambda1_plogit07 = [zip_lambda1_plogit07(i) for i in m]
+
+#Criando um dataframe com m variando de 0 a 20
+
+df_zip = pd.DataFrame({'m':m,
+                       'zip_lambda1_plogit07':zip_lambda1_plogit07})
+df_zip
+# %%
+# Plotagem propriamente dita
+#Comparando as distribuições Poisson, BNeg e ZIP
+
+def smooth_line_plot(x,y):
+    x_new = np.linspace(x.min(), x.max(),500)
+    f = interp1d(x, y, kind='quadratic')
+    y_smooth=f(x_new)
+    return x_new, y_smooth
+
+x_new, zip_lambda1_plogit07 = smooth_line_plot(df_zip.m,
+                                               df_zip.zip_lambda1_plogit07)
+# %%
+plt.figure(figsize=(15,10))
+plt.plot(x_new,lambda_1, linewidth=3, color='#404688FF')
+plt.plot(x_new,lambda_2, linewidth=3, color='#2C728EFF')
+plt.plot(x_new,lambda_4, linewidth=3, color='#20A486FF')
+plt.plot(x_new,bneg_theta2_delta2, linewidth=3, color='#75D054FF')
+plt.plot(x_new,bneg_theta3_delta1, linewidth=3, color='#C7E020FF')
+plt.plot(x_new,bneg_theta3_delta05, linewidth=3, color='#FDE725FF')
+plt.plot(x_new,zip_lambda1_plogit07, linewidth=7, color="#440154FF")
+plt.xlabel('m', fontsize=20)
+plt.ylabel('Probabilidades', fontsize=20)
+plt.legend([r'Poisson: $\lambda$ = 1',
+            r'Poisson: $\lambda$ = 2',
+            r'Poisson: $\lambda$ = 4',
+            r'BNeg: $\theta$ = 2 e $\delta$ = 2',
+            r'BNeg: $\theta$ = 3 e $\delta$ = 1',
+            r'BNeg: $\theta$ = 3 e $\delta$ = 0.5',
+            r'ZIP: $\lambda$ = 1 e plogit = 0.7'],
+           fontsize=24)
+plt.show
+# %%
+##############################################################################
+#              ESTIMAÇÃO DO MODELO ZERO-INFLATED POISSON (ZIP)               #
+##############################################################################
+
+#Definição da variável dependente (voltando ao dataset 'df_corruption')
+y = df_corruption.violations
+# %%
+#Definição das variáveis preditoras que entrarão no componente de contagem
+x1 = df_corruption[['staff','post','corruption']]
+X1 = sm.add_constant(x1)
+# %%
+#Definição das variáveis preditoras que entrarão no componente logit (inflate)
+x2 = df_corruption[['corruption']]
+X2 = sm.add_constant(x2)
+# %%
+#Se estimarmos o modelo sem dummizar as variáveis categórias, o modelo retorna
+#um erro
+X1 = pd.get_dummies(X1, columns=['post'], drop_first=True)
+# %%
+#Estimação do modelo ZIP pela função 'ZeroInflatedPoisson' do pacote
+#'Statsmodels'
+# %%
+#Estimação do modelo ZIP
+#O argumento 'exog_infl' corresponde às variáveis que entram no componente
+#logit (inflate)
+modelo_zip = sm.ZeroInflatedPoisson(y, X1, exog_infl=X2,
+                                    inflation='logit').fit()
+# %%
+#Parâmetros do modelo
+modelo_zip.summary()
+# %%
+# 02:40:00 Break
